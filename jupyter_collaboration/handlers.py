@@ -166,7 +166,9 @@ class YDocWebSocketHandler(WebSocketHandler, JupyterHandler):
         """
         On connection open.
         """
-        self.create_task(self._websocket_server.serve(self))
+        task = asyncio.create_task(self._websocket_server.serve(self))
+        self._background_tasks.add(task)
+        task.add_done_callback(self._background_tasks.discard)
 
         if isinstance(self.room, DocumentRoom):
             # Close the connection if the document session expired
@@ -184,6 +186,9 @@ class YDocWebSocketHandler(WebSocketHandler, JupyterHandler):
             try:
                 # Initialize the room
                 await self.room.initialize()
+                def emit_callback(task: asyncio.Task): 
+                    self._emit(LogLevel.INFO, None, f"Y user joined: {self.current_user.name}")
+                task.add_done_callback(emit_callback)
             except Exception as e:
                 _, _, file_id = decode_file_path(self._room_id)
                 file = self._file_loaders[file_id]
@@ -240,12 +245,12 @@ class YDocWebSocketHandler(WebSocketHandler, JupyterHandler):
                 if "user" in u:
                     name = u["user"]["name"]
                     self._websocket_server.connected_users[user] = name
-                    self.log.debug("Y user joined: %s", name)
+                    
             for user in removed_users:
                 if user in self._websocket_server.connected_users:
                     name = self._websocket_server.connected_users[user]
                     del self._websocket_server.connected_users[user]
-                    self.log.debug("Y user left: %s", name)
+                    #we can't emit here before it is for global awareness room, we don't have room id.
             # filter out message depending on changes
             if skip:
                 self.log.debug(
@@ -279,11 +284,13 @@ class YDocWebSocketHandler(WebSocketHandler, JupyterHandler):
         """
         # stop serving this client
         self._message_queue.put_nowait(b"")
-        if isinstance(self.room, DocumentRoom) and self.room.clients == [self]:
+        if isinstance(self.room, DocumentRoom) and (len(self.room.clients) == 0 or self.room.clients == [self]):
             # no client in this room after we disconnect
             # keep the document for a while in case someone reconnects
             self.log.info("Cleaning room: %s", self._room_id)
             self.room.cleaner = asyncio.create_task(self._clean_room())
+        if isinstance(self.room, DocumentRoom):
+            self._emit(LogLevel.INFO, None, f"Y user left: {self.current_user.name}")
 
     def _emit(self, level: LogLevel, action: str | None = None, msg: str | None = None) -> None:
         _, _, file_id = decode_file_path(self._room_id)

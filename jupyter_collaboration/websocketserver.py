@@ -136,6 +136,9 @@ class JupyterWebsocketServer(WebsocketServer):
             except asyncio.CancelledError:
                 break
             clients_nb = sum(len(room.clients) for room in self.rooms.values())
+            clients = [room.clients for room in self.rooms.values()]
             self.log.info("Processed %s Y patches in one minute", self.ypatch_nb)
             self.log.info("Connected Y users: %s", clients_nb)
+            self.log.info("Connected Y rooms: %s", self.rooms.values())
+            self.log.info("Connected Y clients: %s", clients)
             self.ypatch_nb = 0

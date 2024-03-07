@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+from jupyter_collaboration.listeners import LiveNotebookEventListener
 
 from jupyter_server.extension.application import ExtensionApp
 from pycrdt_websocket.ystore import BaseYStore
@@ -60,6 +61,11 @@ class YDocExtension(ExtensionApp):
     def initialize(self):
         super().initialize()
         self.serverapp.event_logger.register_event_schema(EVENTS_SCHEMA_PATH)
+        live_notebook_listener = LiveNotebookEventListener(self.serverapp, self.ywebsocket_server)
+        self.serverapp.event_logger.add_listener(
+            listener=live_notebook_listener,
+            schema_id="https://schema.jupyter.org/jupyter_collaboration/session/v1",
+        )
 
     def initialize_settings(self):
         self.settings.update(
